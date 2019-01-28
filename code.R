@@ -8,8 +8,8 @@ pacman::p_load(
 )
 
 years <- c('2006', '2007', '2008', '2009', '2010')
-allFile <- "./data/original.csv"
-if(!file.exists(allFile)){
+my_file <- "./data/original.csv"
+if(!file.exists(my_file)){
   conn = dbConnect(
     MySQL(),
     user='deepAnalytics',
@@ -28,9 +28,9 @@ if(!file.exists(allFile)){
     conn,
     query
   )
-  write.csv(df, file=allFile)
+  write.csv(df, file=my_file)
 } else {
-  df <- read.csv(allFile)
+  df <- read.csv(my_file)
 }
 
 # some transformations
@@ -70,7 +70,7 @@ aggregated_df <- c()
 granularity <- c("hour", "day", "week", "month", "year")
 for(g in granularity){
   aggregated_df[[g]] <- df %>%
-    group_by(date = as.Date(floor_date(Datetime, unit = g))) %>%  # hour grouping not working!
+    group_by(date = as.Date(cut(Datetime, unit = g))) %>%  # hour grouping not working!
     summarize(
       obs = n(),
       sub1 = sum(Sub_metering_1),
