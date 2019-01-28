@@ -6,6 +6,7 @@ pacman::p_load(
   "rbokeh",
   "padr"
 )
+set.seed(123)
 
 years <- c('2006', '2007', '2008', '2009', '2010')
 my_file <- "./data/original.csv"
@@ -36,13 +37,25 @@ if(!file.exists(my_file)){
 # some transformations
 df$Datetime <- paste(df$Date, '', df$Time)
 df$Datetime <- as.POSIXct(df$Datetime, "%Y/%m/%d %H:%M:%S")
-# attr(df$Datetime, "tzone") <- "Europe/Paris"
+attr(df$Datetime, "tzone") <- "Europe/Paris"
 df$X <- NULL
+df$Date <- NULL
+df$Time <- NULL
+# df$id <- NULL
 original_df <- df
 df <- pad(df, break_above = 3*10^6)
 
 missing <- which(is.na(df$id))
-set.seed(123)
+# trying to impute faster by grouping
+searchhere <- df[missing, ] %>%
+  group_by(
+    weekday = as.POSIXlt(Datetime)$wday,
+    hour = as.POSIXlt(Datetime)$hour,
+    minute = as.POSIXlt(Datetime)$min
+    ) %>%
+  summarize(obs=n()) %>%
+  arrange(desc(obs))
+
 # my_density <- data.frame()
 for(m in head(missing,1000)){
   # print(paste("row number", m))
@@ -70,7 +83,7 @@ aggregated_df <- c()
 granularity <- c("hour", "day", "week", "month", "year")
 for(g in granularity){
   aggregated_df[[g]] <- df %>%
-    group_by(date = as.Date(cut(Datetime, unit = g))) %>%  # hour grouping not working!
+    group_by(date = as.Date(floor_date(Datetime, unit = g))) %>%  # hour grouping not working!
     summarize(
       obs = n(),
       sub1 = sum(Sub_metering_1),
