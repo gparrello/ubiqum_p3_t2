@@ -4,7 +4,8 @@ pacman::p_load(
   "dplyr",
   "imputeTS",
   "rbokeh",
-  "padr"
+  "padr",
+  "forecast"
 )
 set.seed(123)
 
@@ -37,50 +38,20 @@ if(!file.exists(my_file)){
 # some transformations
 df$Datetime <- paste(df$Date, '', df$Time)
 df$Datetime <- as.POSIXct(df$Datetime, "%Y/%m/%d %H:%M:%S")
-attr(df$Datetime, "tzone") <- "Europe/Paris"
-df$X <- NULL
-df$Date <- NULL
-df$Time <- NULL
-# df$id <- NULL
+attr(df$Datetime, "tzone") <- "GMT" # better than "Europe/Paris"
+df[,c("X","Date","Time","id")] <- NULL
 original_df <- df
-df <- pad(df, break_above = 3*10^6)
+df <- pad(df, break_above = 3e6)
+df <- na.kalman(df)
 
-missing <- which(is.na(df$id))
-# trying to impute faster by grouping
-searchhere <- df[missing, ] %>%
-  group_by(
-    weekday = as.POSIXlt(Datetime)$wday,
-    hour = as.POSIXlt(Datetime)$hour,
-    minute = as.POSIXlt(Datetime)$min
-    ) %>%
-  summarize(obs=n()) %>%
-  arrange(desc(obs))
-
-# my_density <- data.frame()
-for(m in head(missing,1000)){
-  # print(paste("row number", m))
-  my_posix <- as.POSIXlt(df[m,]$Datetime)
-  my_minute <- my_posix$min
-  my_hour <- my_posix$hour
-  my_weekday <- my_posix$wday
-  # print(paste("this are details", my_posix, my_minute, my_hour, my_weekday))
-  my_data_slice <- original_df[which(
-    as.POSIXlt(original_df$Datetime)$min == my_minute &
-    as.POSIXlt(original_df$Datetime)$hour == my_hour &
-    as.POSIXlt(original_df$Datetime)$wday == my_weekday 
-  ),]
-  # print(paste("na rows in slice", length(which(is.na(my_data_slice)))))
-  my_random <- runif(1)
-  # print(my_random)
-  for(c in colnames(df[, -which(names(df) %in% c("id", "Date", "Time", "Datetime"))])){
-    df[m,c] <- quantile(my_data_slice[,c], my_random)
-    # print(paste("this is column", c, "and I will impute", my_impute))
-  }
-}
 
 aggregated_df <- c()
-# aggregated_ts <- c()
-granularity <- c("hour", "day", "week", "month", "year")
+aggregated_ts <- c()
+decomposed_ts <- c()
+decomposed_ts2 <- c()
+granularity <- c("day", "week", "month")
+frequency <- c(365, 52, 12)
+names(frequency) <- granularity
 for(g in granularity){
   aggregated_df[[g]] <- df %>%
     group_by(date = as.Date(floor_date(Datetime, unit = g))) %>%  # hour grouping not working!
@@ -113,6 +84,27 @@ for(g in granularity){
   #if(nrow(aggregated_df[[g]][is.na(aggregated_df[[g]]$obs),]) != 0){
   #  aggregated_df[[g]][is.na(aggregated_df[[g]]$obs),]$obs <- 0
   #}
+  
+  aggregated_ts[[g]] <- ts(
+    aggregated_df[[g]],
+    frequency = frequency[[g]]
+  )
+  
+  my_vector <- c()
+  my_vector2 <- c()
+  for(c in colnames(aggregated_ts[[g]])[!colnames(aggregated_ts[[g]]) %in% c("date", "obs")]){
+    print(paste(g, c))
+    my_vector[[c]] <- stl(
+      aggregated_ts[[g]][,c],
+      s.window = "periodic"
+    )
+    my_vector2[[c]] <- stl(
+      aggregated_ts[[g]][,c],
+      s.window = frequency[[g]]
+    )
+  }
+  decomposed_ts[[g]] <- my_vector
+  decomposed_ts2[[g]] <- my_vector2
 }
 
 # daily_ts <- ts(aggregated_df[[g]], start=c(2006,12,16), frequency = 365)
