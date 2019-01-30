@@ -1,5 +1,6 @@
 pacman::p_load(
-  "shinydashboard"
+  "shinydashboard",
+  "highcharter"
 )
 
 ui <- dashboardPage(
@@ -38,7 +39,8 @@ ui <- dashboardPage(
   ),
   dashboardBody(
     tabItems(
-      tabItem(tabName = "datasets", dataTableOutput("df"))
+      tabItem(tabName = "datasets", dataTableOutput("df")),
+      tabItem(tabName = "graphs", highchartOutput("plot1"))
     )
   )
 )
@@ -57,6 +59,10 @@ server <- function(input, output){
   output$df <- renderDataTable({
     # aggregated_df[[input$select_gran]][,input$select_var]
     final.data <- filtered.data()
+  })
+  
+  output$plot1 <- renderHighchart({
+    hchart(filtered.data(), "line", hcaes(x="date", y="active_sum"))
   })
 }
 
