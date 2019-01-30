@@ -14,14 +14,14 @@ ui <- dashboardPage(
         selectInput(
           "select_gran",
           label = "Select granularity",
-          choices = list("Day" = "day", "Week" = "week", "Month" = "month"), 
+          choices = c("Day" = "day", "Week" = "week", "Month" = "month"), 
           selected = 1)
       ),
       menuItem(
         checkboxGroupInput(
           "select_var",
           label = "Select variable",
-          choices = list(
+          choices = c(
             "Observations" = "obs",
             "Submeter 1" = "sub1",
             "Submeter 2" = "sub2",
@@ -32,7 +32,7 @@ ui <- dashboardPage(
             "Intensity" = "intensity_sum",
             "Voltage" = "voltage_sum"
           ),
-          selected = c("obs", "date"))
+          selected = c("obs", "active_sum"))
       )
     )
   ),
@@ -51,7 +51,7 @@ server <- function(input, output){
   })
   
   filtered.data <- reactive({
-    get.granularity() %>% select(Variable=input$select_var)
+    get.granularity() %>% select(c("date", input$select_var))
   })
   
   output$df <- renderDataTable({
