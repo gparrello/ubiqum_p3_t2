@@ -44,7 +44,7 @@ ui <- dashboardPage(
 )
 
 server <- function(input, output){
-  source("./testdata.R")
+  source("./dashdata.R")
   
   get.granularity <- reactive({
     aggregated_df[[input$select_gran]]
