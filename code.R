@@ -1,4 +1,5 @@
 pacman::p_load(
+  "data.table",
   "RMySQL",
   "lubridate",
   "dplyr",
@@ -9,9 +10,8 @@ pacman::p_load(
 )
 set.seed(123)
 
-years <- c('2006', '2007', '2008', '2009', '2010')
-my_file <- "./data/original.csv"
-if(!file.exists(my_file)){
+queryfunction <- function(){
+  years <- c('2006', '2007', '2008', '2009', '2010')
   conn = dbConnect(
     MySQL(),
     user='deepAnalytics',
@@ -30,31 +30,58 @@ if(!file.exists(my_file)){
     conn,
     query
   )
-  write.csv(df, file=my_file)
-} else {
-  df <- read.csv(my_file)
+  df <- as.data.table(df)
+  return(df)
 }
 
-# some transformations
-df$Datetime <- paste(df$Date, '', df$Time)
-df$Datetime <- as.POSIXct(df$Datetime, "%Y/%m/%d %H:%M:%S")
-attr(df$Datetime, "tzone") <- "GMT" # better than "Europe/Paris"
-df[,c("X","Date","Time","id")] <- NULL
-original_df <- df
-df <- pad(df, break_above = 3e6)
-df <- na.kalman(df)
+original_file <- "./data/original.csv"
+processed_file <- "./data/processed.csv"
+if(file.exists(processed_file)){
+  print("loading processed data from file")
+  # df <- read.csv(processed_file)
+  df <- fread(processed_file)
+  df$Datetime <- as.POSIXct(df$Datetime, origin="1970-01-01", tz="GMT")
+} else {
+  if(!file.exists(original_file)){
+    print("querying original data")
+    df <- queryfunction()
+    print("writing original data to file")
+    # write.csv(df, file=original_file)
+    fwrite(df, file = original_file, dateTimeAs = "epoch")
+  } else {
+    print("loading original data from file")
+    # df <- read.csv(original_file)
+    df <- fread(original_file)
+  }
 
+  # some transformations
+  df$Datetime <- paste(df$Date, '', df$Time)
+  df$Datetime <- as.POSIXct(df$Datetime, "%Y/%m/%d %H:%M:%S", tz="GMT")
+  # attr(df$Datetime, "tzone") <- "GMT" # better than "Europe/Paris"
+  df[,c("Date","Time","id")] <- NULL
+  # original_df <- df
+  df <- pad(df, break_above = 3e6)
+  df <- na.kalman(df)
+  # try interpolation, kalman, spline and random
 
+  print("writing processed data to file")
+  # write.csv(df, file=processed_file)
+  fwrite(df, file = processed_file, dateTimeAs = "epoch")
+
+}
+
+print("calculating granularity")
+# attr(df$Datetime, "tzone") <- "GMT" # better than "Europe/Paris"
 aggregated_df <- c()
 aggregated_ts <- c()
 decomposed_ts <- c()
-decomposed_ts2 <- c()
-granularity <- c("day", "week", "month")
-frequency <- c(365, 52, 12)
+# decomposed_ts2 <- c()
+granularity <- c("hour", "day", "week", "month")
+frequency <- c(365.25*24, 365, 52, 12)
 names(frequency) <- granularity
 for(g in granularity){
   aggregated_df[[g]] <- df %>%
-    group_by(date = as.Date(floor_date(Datetime, unit = g))) %>%  # hour grouping not working!
+    group_by(date = cut(Datetime, g)) %>%  # hour grouping not working!
     summarize(
       obs = n(),
       sub1 = sum(Sub_metering_1),
@@ -80,10 +107,6 @@ for(g in granularity){
     )
   
   aggregated_df[[g]]$obs <- as.integer(aggregated_df[[g]]$obs)
-  #aggregated_df[[g]] <- pad(aggregated_df[[g]])
-  #if(nrow(aggregated_df[[g]][is.na(aggregated_df[[g]]$obs),]) != 0){
-  #  aggregated_df[[g]][is.na(aggregated_df[[g]]$obs),]$obs <- 0
-  #}
   
   aggregated_ts[[g]] <- ts(
     aggregated_df[[g]],
@@ -93,26 +116,15 @@ for(g in granularity){
   my_vector <- c()
   my_vector2 <- c()
   for(c in colnames(aggregated_ts[[g]])[!colnames(aggregated_ts[[g]]) %in% c("date", "obs")]){
-    print(paste(g, c))
     my_vector[[c]] <- stl(
       aggregated_ts[[g]][,c],
       s.window = "periodic"
     )
-    my_vector2[[c]] <- stl(
-      aggregated_ts[[g]][,c],
-      s.window = frequency[[g]]
-    )
+    # my_vector2[[c]] <- stl(
+    #   aggregated_ts[[g]][,c],
+    #   s.window = frequency[[g]]
+    # )
   }
   decomposed_ts[[g]] <- my_vector
-  decomposed_ts2[[g]] <- my_vector2
+  # decomposed_ts2[[g]] <- my_vector2
 }
-
-# daily_ts <- ts(aggregated_df[[g]], start=c(2006,12,16), frequency = 365)
-# daily_ts_imputed <- na.kalman(daily_ts) # use different for short and long missing
-# try interpolation, kalman, spline and random
-
-# p <- figure() %>%
-  # ly_points(daily_ts, x = date, y = obs, color='purple') #%>%
-  #ly_lines(aggregated_df[[g]], x = date, y = sub1, color='green') %>%
-  #ly_lines(aggregated_df[[g]], x = date, y = sub2, color='red') %>%
-  #ly_lines(aggregated_df[[g]], x = date, y = sub3, color='blue')
