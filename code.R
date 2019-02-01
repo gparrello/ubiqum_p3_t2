@@ -44,22 +44,22 @@ fAggregate <- function(input){
       sub2 = sum(Sub_metering_2),
       sub3 = sum(Sub_metering_3),
       nosub = sum(Global_active_power*1000/60 - Sub_metering_1 - Sub_metering_2 - Sub_metering_3),
-      active_sum = sum(Global_active_power),
-      active_mean = mean(Global_active_power),
-      active_min = mean(Global_active_power) - sd(Global_active_power),
-      active_max = mean(Global_active_power) + sd(Global_active_power),
-      reactive_sum = sum(Global_reactive_power),
-      reactive_mean = mean(Global_reactive_power),
-      reactive_min = mean(Global_reactive_power) - sd(Global_reactive_power),
-      reactive_max = mean(Global_reactive_power) + sd(Global_reactive_power),
-      intensity_sum = sum(Global_intensity),
-      intensity_mean = mean(Global_intensity),
-      intensity_min = mean(Global_intensity) - sd(Global_intensity),
-      intensity_max = mean(Global_intensity) + sd(Global_intensity),
-      voltage_sum = sum(Voltage),
-      voltage_mean = mean(Voltage),
-      voltage_min = mean(Voltage) - sd(Voltage),
-      voltage_max = mean(Voltage) + sd(Voltage)
+      active = sum(Global_active_power),
+      # active_mean = mean(Global_active_power),
+      # active_min = mean(Global_active_power) - sd(Global_active_power),
+      # active_max = mean(Global_active_power) + sd(Global_active_power),
+      reactive = sum(Global_reactive_power),
+      # reactive_mean = mean(Global_reactive_power),
+      # reactive_min = mean(Global_reactive_power) - sd(Global_reactive_power),
+      # reactive_max = mean(Global_reactive_power) + sd(Global_reactive_power),
+      intensity = sum(Global_intensity),
+      # intensity_mean = mean(Global_intensity),
+      # intensity_min = mean(Global_intensity) - sd(Global_intensity),
+      # intensity_max = mean(Global_intensity) + sd(Global_intensity),
+      voltage = sum(Voltage)#,
+      # voltage_mean = mean(Voltage),
+      # voltage_min = mean(Voltage) - sd(Voltage),
+      # voltage_max = mean(Voltage) + sd(Voltage)
     )
   
   output$obs <- as.integer(output$obs)
@@ -111,24 +111,36 @@ print("calculating granularity")
 aggregated_df <- c()
 aggregated_ts <- c()
 decomposed_ts <- c()
+decomp <- data.frame()
+metrics <- data.frame()
 
 granularity <- c("hour", "day", "week", "month")
-frequency <- c(365.25*24, 365, 52, 12)
+frequency <- c(365*24, 365, 52, 12)
 start <- c(
-  1,
+  (yday(df$Datetime[1]) - 1)*24 + hour(df$Datetime[1]),
   yday(df$Datetime[1]),  # calculate the day of the year for the first row
   week(df$Datetime[1]),
   month(df$Datetime[1])
 )
+n <- nrow(df)
+end <- c(
+  (yday(df$Datetime[n]) - 1)*24 + hour(df$Datetime[1]),
+  yday(df$Datetime[n]),  # calculate the day of the year for the first row
+  week(df$Datetime[n]),
+  month(df$Datetime[n])
+)
 names(frequency) <- granularity
 names(start) <- granularity
+names(end) <- granularity
+
 for(g in granularity){
   aggregated_df[[g]] <- fAggregate(df)
   
   aggregated_ts[[g]] <- ts(
     aggregated_df[[g]],
     frequency = frequency[[g]],
-    start=c(2006,start[[g]])
+    start=c(2006,start[[g]]),
+    end=c(2010,end[[g]])
   )
   
   my_vector <- c()
@@ -138,6 +150,8 @@ for(g in granularity){
       s.window = "periodic"
       # s.window = frequency[[g]]
     )
+    decomp[g,c] <- my_vector[[c]]
+    metrics[g,c] <- mean(abs(remainder(my_vector[[c]])))/mean(aggregated_ts[[g]][,c])
     
   }
   decomposed_ts[[g]] <- my_vector
@@ -145,7 +159,20 @@ for(g in granularity){
 }
 
 
+# analyze remainder
+mean(
+  abs(
+    remainder(
+      decomposed_ts[["hour"]][["active"]]
+    )
+  )/aggregated_ts[["hour"]][,"active"]
+)
+
+# deniz's way
+mean(abs(remainder(decomposed_ts[["hour"]][["active"]])))/mean(aggregated_ts[["hour"]][,"active"])
+
 ## Forecasting
 
-train_month <- window(aggregated_ts[["month"]][,"active_sum"], start=c(2006,12), end=c(2009,12))
-# test_month <- 
+train_month <- window(aggregated_ts[["month"]][,"active"], start=c(2006,12), end=c(2009,12))
+test_month <- window(aggregated_ts[["month"]][,"active"], start=c(2010,1), end=c(2010,11))
+
