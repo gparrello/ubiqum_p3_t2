@@ -1,0 +1,19 @@
+---
+title: "decomposition"
+author: "Gerardo Parrello"
+date: "January 31, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("./code.R")
+```
+
+```{r}
+for(g in names(decomposed_ts)){
+  print(g)
+  plot(decomposed_ts[[g]][["active_sum"]])
+  # plot(decomposed_ts2[[g]][["active_sum"]])
+}
+```
