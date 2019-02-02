@@ -111,8 +111,8 @@ print("calculating granularity")
 aggregated_df <- c()
 aggregated_ts <- c()
 decomposed_ts <- c()
-decomp <- data.frame()
-metrics <- data.frame()
+relRemainder <- data.frame()
+absRemainder <- data.frame()
 
 granularity <- c("hour", "day", "week", "month")
 frequency <- c(365*24, 365, 52, 12)
@@ -143,33 +143,21 @@ for(g in granularity){
     end=c(2010,end[[g]])
   )
   
-  my_vector <- c()
-  for(c in colnames(aggregated_ts[[g]])[!colnames(aggregated_ts[[g]]) %in% c("date", "obs")]){
-    my_vector[[c]] <- stl(
+  vDecomp <- c()
+  excluded_columns <- colnames(aggregated_ts[[g]]) %in% c("date", "obs")
+  for(c in colnames(aggregated_ts[[g]])[!excluded_columns]){
+    vDecomp[[c]] <- stl(
       aggregated_ts[[g]][,c],
       s.window = "periodic"
       # s.window = frequency[[g]]
     )
-    decomp[g,c] <- my_vector[[c]]
-    metrics[g,c] <- mean(abs(remainder(my_vector[[c]])))/mean(aggregated_ts[[g]][,c])
+    absRemainder[g,c] <- mean(abs(remainder(vDecomp[[c]])))
+    relRemainder[g,c] <- mean(abs(remainder(vDecomp[[c]])))/mean(aggregated_ts[[g]][,c])
     
   }
-  decomposed_ts[[g]] <- my_vector
+  decomposed_ts[[g]] <- vDecomp
   
 }
-
-
-# analyze remainder
-mean(
-  abs(
-    remainder(
-      decomposed_ts[["hour"]][["active"]]
-    )
-  )/aggregated_ts[["hour"]][,"active"]
-)
-
-# deniz's way
-mean(abs(remainder(decomposed_ts[["hour"]][["active"]])))/mean(aggregated_ts[["hour"]][,"active"])
 
 ## Forecasting
 
