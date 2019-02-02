@@ -96,6 +96,7 @@ if(file.exists(processed_file)){
   df[,c("Date","Time","id")] <- NULL
   # original_df <- df
   df <- pad(df, break_above = 3e6)
+  print("chivato")
   df <- na.kalman(df)
   # try interpolation, kalman, spline and random
 
@@ -108,9 +109,9 @@ if(file.exists(processed_file)){
 
 print("calculating granularity")
 
-aggregated_df <- c()
-aggregated_ts <- c()
-decomposed_ts <- c()
+aggdf <- c()
+tseries <- c()
+tseriesDecomp <- c()
 relRemainder <- data.frame()
 absRemainder <- data.frame()
 
@@ -134,33 +135,53 @@ names(start) <- granularity
 names(end) <- granularity
 
 for(g in granularity){
-  aggregated_df[[g]] <- fAggregate(df)
+  aggdf[[g]] <- fAggregate(df)
   
-  aggregated_ts[[g]] <- ts(
-    aggregated_df[[g]],
+  tseries[[g]] <- ts(
+    aggdf[[g]],
     frequency = frequency[[g]],
     start=c(2006,start[[g]]),
     end=c(2010,end[[g]])
   )
   
   vDecomp <- c()
-  excluded_columns <- colnames(aggregated_ts[[g]]) %in% c("date", "obs")
-  for(c in colnames(aggregated_ts[[g]])[!excluded_columns]){
+  excluded_columns <- colnames(tseries[[g]]) %in% c("date", "obs")
+  for(c in colnames(tseries[[g]])[!excluded_columns]){
     vDecomp[[c]] <- stl(
-      aggregated_ts[[g]][,c],
+      tseries[[g]][,c],
       s.window = "periodic"
       # s.window = frequency[[g]]
     )
     absRemainder[g,c] <- mean(abs(remainder(vDecomp[[c]])))
-    relRemainder[g,c] <- mean(abs(remainder(vDecomp[[c]])))/mean(aggregated_ts[[g]][,c])
+    relRemainder[g,c] <- mean(abs(remainder(vDecomp[[c]])))/mean(tseries[[g]][,c])
     
   }
-  decomposed_ts[[g]] <- vDecomp
+  tseriesDecomp[[g]] <- vDecomp
   
 }
 
+
+## Modeling
+full_set <- tseries[["month"]][,"active"]
+train_set <- window(full_set, start=c(2006,12), end=c(2009,12))
+test_set <- window(full_set, start=c(2010,1), end=c(2010,11))
+
+# Linear model
+models <- c()
+models[["linear"]] <- tslm(train_set ~ trend + season)
+models[["arima"]] <- arima(train_set, order = c(0,0,1), seasonal = c(1,1,0))
+models[["hw"]] <- HoltWinters(train_set)
+
 ## Forecasting
+forecasts <- c()
+accuracies <- c()
+for(m in names(models)){
+  forecasts[[m]] <- forecast(models[[m]], h=10, level=c(80,90))
+  accuracies[[m]] <- accuracy(forecasts[[m]], test_set)
+}
 
-train_month <- window(aggregated_ts[["month"]][,"active"], start=c(2006,12), end=c(2009,12))
-test_month <- window(aggregated_ts[["month"]][,"active"], start=c(2010,1), end=c(2010,11))
-
+plots <- c()
+for(f in names(forecasts)){
+  plots[[f]] <- autoplot(full_set, series="Real") +
+    autolayer(forecasts[[f]], series = "Forecasted")
+}
