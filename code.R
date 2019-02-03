@@ -166,7 +166,7 @@ for(g in granularity){
 full_set <- tseries[["month"]][,"active"]
 # full_set <- window(full_set, end=c(2010,10))
 train_set <- window(full_set, start=c(2006,12), end=c(2009,12))
-test_set <- window(full_set, start=c(2010,1))
+merged_ts_set <- window(full_set, start=c(2010,1))
 
 # Linear model
 allModels <- c()
@@ -189,7 +189,7 @@ for(s in names(allModels)){
   for(m in names(models)){
     forecasts[[m]] <- forecast(models[[m]], h=10, level=c(90,95,99))
     if(s == "train"){
-      accuracies[[m]] <- accuracy(forecasts[[m]], test_set)
+      accuracies[[m]] <- accuracy(forecasts[[m]], merged_ts_set)
       }
   }
   allForecasts[[s]] <- forecasts
@@ -200,9 +200,10 @@ for(s in names(allForecasts)){
   forecasts <- allForecasts[[s]]
   plots <- c()
   for(f in names(forecasts)){
-    test <- c(as.xts(sets[[s]]), as.xts(allForecasts[[s]][[f]]$mean))
-    names(test) <- c("data")
-    plots[[f]] <- autoplot(test, series = "Real") +
+    merged_ts <- c(as.xts(sets[[s]]), as.xts(allForecasts[[s]][[f]]$mean))
+    names(merged_ts) <- c("data")
+    merged_ts <- ts(merged_ts, start = start(merged_ts), end = end(merged_ts), frequency = frequency(merged_ts))
+    plots[[f]] <- autoplot(merged_ts, series = "Real") +
       autolayer(forecasts[[f]], series = "Forecasted")
   }
   plots[["all"]] <- autoplot(full_set, series = "Real") +
