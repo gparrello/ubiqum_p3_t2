@@ -7,7 +7,8 @@ pacman::p_load(
   "rbokeh",
   "padr",
   "forecast",
-  "ggplot2"
+  "ggplot2",
+  "xts"
 )
 set.seed(123)
 
@@ -163,25 +164,60 @@ for(g in granularity){
 
 ## Modeling
 full_set <- tseries[["month"]][,"active"]
+# full_set <- window(full_set, end=c(2010,10))
 train_set <- window(full_set, start=c(2006,12), end=c(2009,12))
-test_set <- window(full_set, start=c(2010,1), end=c(2010,11))
+test_set <- window(full_set, start=c(2010,1))
 
 # Linear model
-models <- c()
-models[["linear"]] <- tslm(train_set ~ trend + season)
-models[["arima"]] <- arima(train_set, order = c(0,0,1), seasonal = c(1,1,0))
-models[["hw"]] <- HoltWinters(train_set)
+allModels <- c()
+sets <- list(train_set, full_set)
+names(sets) <- c("train", "full")
+for(s in names(sets)){
+  models <- c()
+  models[["linear"]] <- tslm(sets[[s]] ~ trend + season)
+  models[["arima"]] <- arima(sets[[s]], order = c(0,0,1), seasonal = c(1,1,0))
+  models[["hw"]] <- HoltWinters(sets[[s]])
+  allModels[[s]] <- models
+}
 
 ## Forecasting
-forecasts <- c()
+allForecasts <- c()
 accuracies <- c()
-for(m in names(models)){
-  forecasts[[m]] <- forecast(models[[m]], h=10, level=c(80,90))
-  accuracies[[m]] <- accuracy(forecasts[[m]], test_set)
+for(s in names(allModels)){
+  forecasts <- c()
+  models <- allModels[[s]]
+  for(m in names(models)){
+    forecasts[[m]] <- forecast(models[[m]], h=10, level=c(90,95,99))
+    if(s == "train"){
+      accuracies[[m]] <- accuracy(forecasts[[m]], test_set)
+      }
+  }
+  allForecasts[[s]] <- forecasts
 }
 
-plots <- c()
-for(f in names(forecasts)){
-  plots[[f]] <- autoplot(full_set, series="Real") +
-    autolayer(forecasts[[f]], series = "Forecasted")
+allPlots <- c()
+for(s in names(allForecasts)){
+  forecasts <- allForecasts[[s]]
+  plots <- c()
+  for(f in names(forecasts)){
+    test <- c(as.xts(sets[[s]]), as.xts(allForecasts[[s]][[f]]$mean))
+    names(test) <- c("data")
+    plots[[f]] <- autoplot(test, series = "Real") +
+      autolayer(forecasts[[f]], series = "Forecasted")
+  }
+  plots[["all"]] <- autoplot(full_set, series = "Real") +
+    autolayer(forecasts[["arima"]], series = "ARIMA") +
+    autolayer(forecasts[["linear"]], series = "Linear") +
+    autolayer(forecasts[["hw"]], series = "Holt-Winters")
+  allPlots[[s]] <- plots
 }
+
+p <- c()
+for(s in names(sets)){
+  p[[s]] <- figure() %>%
+    ly_lines(sets[[s]]) %>%
+    ly_lines(allForecasts[[s]][["linear"]]$mean, color="green") %>%
+    ly_lines(allForecasts[[s]][["hw"]]$mean, color="blue") %>%
+    ly_lines(allForecasts[[s]][["arima"]]$mean, color="red")
+}
+
