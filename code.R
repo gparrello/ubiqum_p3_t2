@@ -36,6 +36,22 @@ fQuery <- function(){
   return(df)
 }
 
+fUpsert <- function(table, df){
+  conn = dbConnect(
+    MySQL(),
+    user='root',
+    password='password',
+    dbname='energy',
+    host='10.8.1.1',
+    port=33006
+  )
+  dbWriteTable(
+    conn,
+    table,
+    df
+  )
+}
+
 fAggregate <- function(input){
   output <- input %>%
     group_by(date = cut(Datetime, g)) %>%  # hour grouping not working!
@@ -222,3 +238,8 @@ for(s in names(sets)){
     ly_lines(allForecasts[[s]][["arima"]]$mean, color="red")
 }
 
+upsertData <- data.frame(
+  active=as.matrix(allForecasts[["full"]][["hw"]]$mean),
+  date=as.Date(time(allForecasts[["full"]][["hw"]]$mean))
+)
+fUpsert("forecast_months", upsertData)
