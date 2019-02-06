@@ -203,7 +203,7 @@ for(s in names(allModels)){
   forecasts <- c()
   models <- allModels[[s]]
   for(m in names(models)){
-    forecasts[[m]] <- forecast(models[[m]], h=10, level=c(90,95,99))
+    forecasts[[m]] <- forecast(models[[m]], h=10, level=c(80,90,95,99))
     if(s == "train"){
       accuracies[[m]] <- accuracy(forecasts[[m]], merged_ts_set)
       }
@@ -240,6 +240,14 @@ for(s in names(sets)){
 
 upsertData <- data.frame(
   active=as.matrix(allForecasts[["full"]][["hw"]]$mean),
+  max=as.matrix(allForecasts[["full"]][["hw"]]$upper[,"90%"]),
+  min=as.matrix(allForecasts[["full"]][["hw"]]$lower[,"90%"]),
   date=as.Date(time(allForecasts[["full"]][["hw"]]$mean))
 )
 fUpsert("forecast_months", upsertData)
+
+results_names <- c("Linear", "ARIMA", "Holt-Winters")
+results_train <- round(Reduce(rbind,accuracies),2)[c(1,3,5),c(2,3,7)]
+results_test <- round(Reduce(rbind,accuracies),2)[c(2,4,6),c(2,3,7)]
+row.names(results_train) <- results_names
+row.names(results_test) <- results_names
